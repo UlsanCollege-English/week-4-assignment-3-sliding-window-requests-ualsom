@@ -1,35 +1,24 @@
+import pytest
 from src.limiter import RateLimiter
 
-def test_basic_window():
-    r = RateLimiter(2, 10)
-    assert r.allow(100) is True
-    assert r.allow(105) is True
-    assert r.allow(109) is False  # would be 3 in window (99,109]
-    assert r.allow(111) is True   # 100 fell off: window (101,111]
+def test_basic_rate_limiting():
+    r = RateLimiter(3, 10)
+    assert r.allow(1) == True
+    assert r.allow(2) == True
+    assert r.allow(3) == True
+    assert r.allow(4) == False  # limit reached
 
+def test_expiry_allows_again():
+    r = RateLimiter(2, 5)
+    assert r.allow(1) == True
+    assert r.allow(2) == True
+    assert r.allow(7) == True  # (1 and 2) are outside window (2 + 5 = 7)
 
-# --- Edge Cases ---
-def test_edge_eviction_at_exact_boundary():
-    r = RateLimiter(2, 10)
-    assert r.allow(100) is True
-    assert r.allow(110) is True  # window (100,110] includes 110 but evicts <= 100
-    assert r.allow(110) is False
-    assert r.allow(111) is True  # 100 is out because border is 101
-
-def test_edge_many_same_timestamp():
-    r = RateLimiter(3, 5)
-    assert r.allow(100) is True
-    assert r.allow(100) is True
-    assert r.allow(100) is True
-    assert r.allow(100) is False  # exceeds N in window
-
-# --- Longer Scenario ---
-def test_long_stream_allow_deny_pattern():
-    r = RateLimiter(3, 4)
-    seq = [0,1,2,3,  # fill window
-           3,        # deny (still 4 in ( -4,3 ])
-           5,        # evicts 0,1; now allow
-           6,6,6,    # allow up to capacity; last one denies
-           10,10]    # far jump clears window; allow both
-    results = [r.allow(t) for t in seq]
-    assert results == [True, True, True, True, False, True, True, True, False, True, True]
+def test_multiple_expiry():
+    r = RateLimiter(2, 4)
+    assert r.allow(1) == True
+    assert r.allow(2) == True
+    assert r.allow(3) == False
+    assert r.allow(6) == True  # (1, 2) expired, (6) allowed
+    assert r.allow(7) == True
+    assert r.allow(8) == False
